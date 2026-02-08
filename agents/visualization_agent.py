@@ -19,3 +19,14 @@ class VisualizationAgent:
     def __init__(self):
         self.client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         self.sandbox_dir = None
+
+    def create_sandbox_environment(self) -> str:
+        """
+        Vytvoří izolované sandbox prostředí pro vykreslování grafů
+
+        Vrací:
+            Cesta k sandbox adresáři
+        """
+        self.sandbox_dir = tempfile.mkdtemp(prefix="viz_sandbox_")
+
+        # Vytvoření requirements.txt pro sandbox

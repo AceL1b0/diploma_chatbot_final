@@ -222,10 +222,59 @@ Vytvořte jednoduchý, funkční skript bez Plotly.
                 "generated_files": [],
             }
 
+
     def cleanup_sandbox(self):
         """Vyčistí sandbox prostředí"""
         if self.sandbox_dir and os.path.exists(self.sandbox_dir):
             shutil.rmtree(self.sandbox_dir)
             self.sandbox_dir = None
 
+
+    def create_visualizations(self, instructions: Dict[str, Any],
+                              dataset_path: str) -> Dict[str, Any]:
+        """
+        Hlavní metoda pro vytvoření vizualizací
+
+        Args:
+            instructions: Instrukce od Main Agent
+            dataset_path: Cesta k datasetu
+
+        Returns:
+            Dict s výsledky vizualizace
+        """
+        try:
+            # Vytvoření sandbox prostředí
+            sandbox_dir = self.create_sandbox_environment()
+
+            # Generování skriptu
+            script = self.generate_visualization_script(instructions)
+
+            # Spuštění skriptu
+            execution_result = self.execute_visualization_script(script,
+                                                                 dataset_path,
+                                                                 sandbox_dir)
+
+            return {
+                "success": execution_result["success"],
+                "generated_files": execution_result.get("generated_files", []),
+                "script": script,
+                "execution_log": {
+                    "stdout": execution_result.get("stdout", ""),
+                    "stderr": execution_result.get("stderr", ""),
+                    "error": execution_result.get("error", "")
+                },
+                "sandbox_dir": sandbox_dir
+            }
+
+        except Exception as e:
+            import traceback
+            return {
+                "success": False,
+                "error": f"Chyba při vytváření vizualizací: {str(e)}",
+                "generated_files": [],
+                "execution_log": {
+                    "error": str(e),
+                    "traceback": traceback.format_exc()
+                }
+            }
 

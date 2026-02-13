@@ -134,3 +134,98 @@ Vytvořte jednoduchý, funkční skript bez Plotly.
          Returns:
              Dict s výsledky spuštění
          """
+
+        try:
+            # Zkopírování datasetu do sandbox
+            dataset_filename = os.path.basename(dataset_path)
+            sandbox_dataset_path = os.path.join(sandbox_dir, "data.csv")
+
+            # Konverze na CSV pokud je potřeba
+            if dataset_path.endswith('.csv'):
+                shutil.copy2(dataset_path, sandbox_dataset_path)
+            else:
+                df = pd.read_excel(dataset_path)
+                df.to_csv(sandbox_dataset_path, index=False)
+
+            # Uložení skriptu do sandbox
+            script_path = os.path.join(sandbox_dir, "visualization.py")
+            with open(script_path, 'w', encoding='utf-8') as f:
+                f.write(script)
+
+            # Spuštění skriptu v sandbox
+            result = subprocess.run(
+                [sys.executable, script_path],
+                cwd=sandbox_dir,
+                capture_output=True,
+                text=True,
+                timeout=int(os.getenv("SANDBOX_TIMEOUT", "30"))
+            )
+
+            # Hledání vygenerovaných souborů
+            generated_files = []
+            preferred_exts = ('.png', '.svg', '.html', '.jpg', '.jpeg')
+
+            for ext in preferred_exts:
+                main_path = os.path.join(sandbox_dir, f"main{ext}")
+                if os.path.exists(main_path):
+                    generated_files.append(main_path)
+                    break
+
+            def graph_sort_key(name: str) -> int:
+                try:
+                    base = os.path.basename(name)
+                    num = ''.join(ch for ch in base if ch.isdigit())
+                    return int(num) if num else 0
+                except Exception:
+                    return 0
+
+            graph_candidates = []
+            for root, _, files in os.walk(sandbox_dir):
+                for file in files:
+                    lower = file.lower()
+                    if lower.startswith('graph') and lower.endswith(
+                            preferred_exts):
+                        graph_candidates.append(os.path.join(root, file))
+            graph_candidates.sort(key=graph_sort_key)
+            for p in graph_candidates:
+                if p not in generated_files:
+                    generated_files.append(p)
+
+            for root, _, files in os.walk(sandbox_dir):
+                for file in files:
+                    if file.lower().endswith(preferred_exts):
+                        p = os.path.join(sandbox_dir,
+                                         file) if not os.path.isabs(
+                            file) else file
+                        if p not in generated_files:
+                            generated_files.append(p)
+
+            return {
+                "success": result.returncode == 0,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "generated_files": generated_files,
+                "script_path": script_path,
+                "return_code": result.returncode
+            }
+
+        except subprocess.TimeoutExpired:
+            return {
+                "success": False,
+                "error": "Timeout při spuštění skriptu",
+                "generated_files": []
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Chyba při spuštění skriptu: {str(e)}",
+                "generated_files": [],
+            }
+
+    def cleanup_sandbox(self):
+        """Vyčistí sandbox prostředí"""
+        if self.sandbox_dir and os.path.exists(self.sandbox_dir):
+            shutil.rmtree(self.sandbox_dir)
+            self.sandbox_dir = None
+
+

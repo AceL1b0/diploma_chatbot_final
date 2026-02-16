@@ -93,4 +93,56 @@ def normalize_params(params: Dict[str, Any], df: pd.DataFrame) -> Dict[str, Any]
 
 sns.set_theme(style="whitegrid", palette="Set2")
 
+# Visualization tools
+
+def dual_axes_chart(df: pd.DataFrame, x: str, y1: str, y2: str, fmt: str):
+    agg = df.groupby(x, as_index=False)[[y1, y2]].mean()
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+    ax1.plot(agg[x], agg[y1], marker="o", label=pretty(y1))
+    ax1.set_xlabel(pretty(x))
+    ax1.set_ylabel(pretty(y1))
+    ax2 = ax1.twinx()
+    ax2.plot(agg[x], agg[y2], marker="s", color="orange", label=pretty(y2))
+    ax2.set_ylabel(pretty(y2))
+    plt.title(f"{pretty(y1)} a {pretty(y2)} v čase ({pretty(x)})")
+    fig.autofmt_xdate()
+    return fig_to_base64(fig, fmt)
+
+
+def violin_chart(df: pd.DataFrame, cat: str, num: str, fmt: str):
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.violinplot(
+        data=df,
+        x=cat,
+        y=num,
+        ax=ax,
+        inner="quartile",
+        cut=0
+    )
+    ax.set_xlabel(pretty(cat))
+    ax.set_ylabel(pretty(num))
+    ax.set_title(f"Rozdělení {pretty(num)} podle {pretty(cat)}")
+    return fig_to_base64(fig, fmt)
+
+
+
+def heatmap_chart(df: pd.DataFrame, fmt: str):
+    num = df.select_dtypes(include="number")
+    if num.shape[1] < 2:
+        raise ValueError("Not enough numeric columns for heatmap")
+    corr = num.corr()
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sns.heatmap(corr, annot=True, cmap="coolwarm", ax=ax)
+    ax.set_title("Korelační heatmapa")
+    return fig_to_base64(fig, fmt)
+
+
+TOOL_REGISTRY = {
+    "dual_axes": dual_axes_chart,
+    "violin": violin_chart,
+    "heatmap": heatmap_chart,
+}
+
+# LLM analysis prompt
+
 

@@ -157,7 +157,7 @@ Tvůj úkol:
 2. Navrhnout 2–3 grafy, které tento insight nejlépe vysvětlí.
 3. Používej POUZE tyto nástroje:
    - dual_axes(x, y1, y2)
-   - boxplot(cat, num)
+   - violin(cat, num)
    - heatmap()
 
 Pravidla:

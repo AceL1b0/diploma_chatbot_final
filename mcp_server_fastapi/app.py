@@ -145,4 +145,72 @@ TOOL_REGISTRY = {
 
 # LLM analysis prompt
 
+ANALYSIS_PROMPT = """
+Jsi zkušený datový analytik.
+
+Dostaneš:
+- schéma datasetu (sloupce a jejich typy)
+- požadavek uživatele
+
+Tvůj úkol:
+1. Najít HLAVNÍ INSIGHT v datech.
+2. Navrhnout 2–3 grafy, které tento insight nejlépe vysvětlí.
+3. Používej POUZE tyto nástroje:
+   - dual_axes(x, y1, y2)
+   - boxplot(cat, num)
+   - heatmap()
+
+Pravidla:
+- Používej PŘESNÉ názvy sloupců ze schématu.
+- Nevymýšlej nové sloupce.
+- Upřednostňuj kvalitu před množstvím.
+- Pokud si nejsi jistý, zvol nejrozumnější možnost.
+
+Výstup MUSÍ být platný Python dict:
+{
+  "insight": "<jedna stručná věta>",
+  "charts": [
+    {"tool": "<název>", "params": {...}},
+    ...
+  ]
+}
+"""
+
+
+def analysis_plan(prompt: str, df: pd.DataFrame) -> Dict[str, Any]:
+    llm = get_llm()
+    model = os.getenv("LLM_MODEL")
+    if not model:
+        raise RuntimeError("LLM_MODEL not set")
+
+    schema = {
+        "numeric": df.select_dtypes(include="number").columns.tolist(),
+        "categorical": df.select_dtypes(exclude="number").columns.tolist(),
+    }
+
+    user_msg = f"""
+Požadavek uživatele: {prompt}
+Schéma datasetu: {schema}
+"""
+
+    resp = llm.messages.create(
+        model=model,
+        max_tokens=900,
+        system=ANALYSIS_PROMPT,
+        messages=[{"role": "user", "content": user_msg}],
+    )
+
+    raw = (resp.content[0].text or "").strip()
+
+    if "```" in raw:
+        raw = raw.split("```")[1].replace("python", "").strip()
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        try:
+            return ast.literal_eval(raw)
+        except Exception:
+            raise HTTPException(500, f"Invalid LLM output:\n{raw}")
+
 

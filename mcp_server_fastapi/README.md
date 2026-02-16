@@ -19,7 +19,6 @@ export ANTHROPIC_API_KEY=...
 export LLM_MODEL=claude-3-5-sonnet-20241022
 uvicorn app:app --host 0.0.0.0 --port 7860
 ```
-
 ## Nasazení na Hugging Face Spaces
 
 1. Vytvořte nový Space (typ: Python, CPU).

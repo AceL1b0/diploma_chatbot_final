@@ -214,3 +214,54 @@ Schéma datasetu: {schema}
             raise HTTPException(500, f"Invalid LLM output:\n{raw}")
 
 
+# API
+
+@app.post("/advanced-visualization")
+def advanced_visualization(req: VisualizationRequest):
+    df = load_df(req.dataset_info)
+    fmt = req.output_format
+
+    plan = analysis_plan(req.prompt, df)
+
+    images = {}
+    errors = []
+
+    for chart in plan.get("charts", [])[:3]:
+        tool = chart.get("tool")
+        params = chart.get("params", {})
+
+        if tool not in TOOL_REGISTRY:
+            errors.append(f"Unknown tool: {tool}")
+            continue
+
+        try:
+            norm_params = normalize_params(params, df)
+            img = TOOL_REGISTRY[tool](df, **norm_params, fmt=fmt)
+            images[tool] = img
+        except Exception as e:
+            errors.append(f"{tool}: {str(e)}")
+
+    if not images:
+        raise HTTPException(500, f"No visualizations generated. Errors: {errors}")
+
+    return {
+        "success": True,
+        "insight": plan.get("insight"),
+        "visualization": next(iter(images.values())),
+        "visualizations": images,
+        "tool_errors": errors,
+    }
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", "7860")),
+    )

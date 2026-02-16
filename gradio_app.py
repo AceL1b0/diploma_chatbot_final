@@ -4,7 +4,7 @@ Gradio rozhraní pro multiagentní chatbot pro vizualizaci dat
 import gradio as gr
 import os
 import tempfile
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Dict
 import shutil
 
 from agents.main_agent import MainAgent
@@ -233,7 +233,7 @@ class DataVisualizationChatbot:
         score_text += f"Celkem hodnocení: {stats['rated']} (Dobré: {stats['good']}, Špatné: {stats['bad']})"
         return score_text
 
-    def reset_conversation(self) -> Tuple[str, str, str, List[str]]:
+    def reset_conversation(self) -> Tuple[str, List[Dict[str, str]], str, List[str]]:
         """Resetuje konverzaci a dataset"""
         self.main_agent.reset_conversation()
         self.viz_agent.cleanup_sandbox()
@@ -247,12 +247,6 @@ def create_gradio_interface():
 
     with gr.Blocks(
             title="Multiagentní Chatbot pro Vizualizaci Dat",
-            theme=gr.themes.Soft(),
-            css="""
-        .gradio-container {
-            max-width: 1200px !important;
-        }
-        """
     ) as interface:
         gr.Markdown("""
         # 🤖 Multiagentní Chatbot pro Vizualizaci Dat
@@ -293,7 +287,7 @@ def create_gradio_interface():
                 with gr.Group():
                     gr.Markdown("### 📊 Hodnocení vizualizací")
                     rating_radio = gr.Radio(
-                        choices=[(0, "❌ Špatné"), (1, "✅ Dobré")],
+                        choices=[("❌ Špatné", 0), ("✅ Dobré", 1)],
                         label="Hodnocení poslední vizualizace",
                         value=None
                     )
@@ -309,8 +303,7 @@ def create_gradio_interface():
                 chatbot_interface = gr.Chatbot(
                     label="💬 Chat s chatbotem",
                     height=400,
-                    show_label=True,
-                    type="messages"
+                    show_label=True
                 )
 
                 # Input pro zprávy
@@ -396,5 +389,11 @@ if __name__ == "__main__":
         server_name="0.0.0.0",
         server_port=7862,
         share=False,
-        show_error=True
+        show_error=True,
+        theme=gr.themes.Soft(),
+        css="""
+        .gradio-container {
+            max-width: 1200px !important;
+        }
+        """
     )

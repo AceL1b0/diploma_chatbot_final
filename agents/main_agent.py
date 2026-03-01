@@ -5,14 +5,41 @@ import os
 import pandas as pd
 from anthropic import Anthropic
 from dotenv import load_dotenv
-from typing import Optional, List, Dict, Any
-import json
-import re
+from typing import List, Dict, Any
 
 load_dotenv()
 
 
 class MainAgent:
+    INTERPRET_TOOL = {
+        "name": "interpret_request",
+        "description": "Interpretuje požadavek uživatele a rozhodne o typech grafů pro vizualizaci.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "specific_graphs": {
+                    "type": "boolean",
+                    "description": "True pokud uživatel specifikoval konkrétní grafy, jinak False."
+                },
+                "graph_types": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Grafy požadované uživatelem (pouze pokud specific_graphs=true)."
+                },
+                "default_graphs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "3 doporučené grafy pro dataset (pouze pokud specific_graphs=false)."
+                },
+                "reasoning": {
+                    "type": "string",
+                    "description": "Stručné zdůvodnění výběru grafů."
+                }
+            },
+            "required": ["specific_graphs", "graph_types", "default_graphs", "reasoning"]
+        }
+    }
+
     def __init__(self):
         """Inicializace Main Agent"""
         self.client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -63,101 +90,53 @@ class MainAgent:
         except Exception as e:
             return {"error": f"Chyba při zpracování souboru: {str(e)}"}
 
-    def _extract_json(self, text: str) -> Dict[str, Any]:
-        """Try to parse JSON from raw LLM text with common fallbacks."""
-        if not text:
-            raise ValueError("Empty response")
-        # Strip markdown fences if present
-        if "```" in text:
-            # Prefer ```json block
-            start_marker = "```json"
-            if start_marker in text:
-                start = text.find(start_marker) + len(start_marker)
-                end = text.find("```", start)
-                candidate = text[start:end].strip() if end != -1 else text
-                return json.loads(candidate)
-            # Fallback to first fenced block
-            start = text.find("```") + 3
-            end = text.find("```", start)
-            candidate = text[start:end].strip() if end != -1 else text
-            try:
-                return json.loads(candidate)
-            except Exception:
-                pass
-        # Try direct parse
-        try:
-            return json.loads(text)
-        except Exception:
-            # Find first JSON object via regex
-            match = re.search(r"\{[\s\S]*\}", text)
-            if match:
-                return json.loads(match.group(0))
-            raise
-
     def interpret_user_request(self, user_message: str) -> Dict[str, Any]:
-        """
-        Interpretuje požadavek uživatele a rozhoduje o typu vizualizace
+        if not user_message or not user_message.strip():
+            user_message = "Vytvoř doporučené grafy"
 
-        Args:
-            user_message: Zpráva od uživatele
-
-        Returns:
-            Dict s rozhodnutím o vizualizaci
-        """
         if not self.dataset_info:
             return {"error": "Nejdříve nahrajte dataset"}
 
-        # Prompt pro analýzu požadavku uživatele
-        system_prompt = f"""
-        Jste expert na analýzu dat a vizualizaci. Máte k dispozici dataset s následujícími informacemi:
+        system_prompt = f"""Jste expert na analýzu dat a vizualizaci.
 
-        Dataset info:
-        - Počet řádků: {self.dataset_info['shape'][0]}
-        - Počet sloupců: {self.dataset_info['shape'][1]}
-        - Sloupce: {self.dataset_info['columns']}
-        - Numerické sloupce: {self.dataset_info['numeric_columns']}
-        - Kategorické sloupce: {self.dataset_info['categorical_columns']}
+Dataset:
+- Řádky: {self.dataset_info['shape'][0]}, Sloupce: {self.dataset_info['shape'][1]}
+- Sloupce: {self.dataset_info['columns']}
+- Numerické: {self.dataset_info['numeric_columns']}
+- Kategorické: {self.dataset_info['categorical_columns']}
 
-        Uživatel napsal: "{user_message}"
-
-        Rozhodněte:
-        1. Zda uživatel specifikoval konkrétní grafy (specific_graphs: true/false)
-        2. Pokud ano, jaké grafy chce (graph_types: [])
-        3. Pokud ne, doporučte 3 profesionální grafy (default_graphs: [])
-
-        Odpovězte ve formátu JSON a pouze JSON (bez Markdownu, bez komentářů), minifikovaně na jeden řádek:
-        {{"specific_graphs": true/false, "graph_types": ["typ1", "typ2"], "default_graphs": ["typ1", "typ2", "typ3"], "reasoning": "..."}}
-        """
+Rozhodněte o grafech pro požadavek uživatele pomocí nástroje interpret_request."""
 
         try:
             model = os.getenv("LLM_MODEL")
             if not model:
                 raise ValueError("LLM_MODEL není nastaveno v .env/Secrets")
+
             response = self.client.messages.create(
                 model=model,
                 max_tokens=1000,
-                messages=[{"role": "user", "content": system_prompt}]
+                system=system_prompt,
+                tools=[self.INTERPRET_TOOL],
+                tool_choice={"type": "tool", "name": "interpret_request"},
+                messages=[{"role": "user", "content": user_message}]
             )
 
-            response_text = response.content[
-                0].text if response and response.content else ""
-            decision = self._extract_json(response_text)
+            decision = None
+            for block in response.content:
+                if block.type == "tool_use" and block.name == "interpret_request":
+                    decision = block.input
+                    break
 
-            # Přidání do historie konverzace
-            self.conversation_history.append({
-                "role": "user",
-                "content": user_message
-            })
-            self.conversation_history.append({
-                "role": "assistant",
-                "content": decision.get("reasoning", "")
-            })
+            if decision is None:
+                return {"error": "LLM nevrátil tool_use blok"}
+
+            self.conversation_history.append({"role": "user", "content": user_message})
+            self.conversation_history.append({"role": "assistant", "content": decision.get("reasoning", "")})
 
             return decision
 
         except Exception as e:
-            return {"error": f"Chyba při interpretaci požadavku: {str(e)}",
-                    "raw": response_text if 'response_text' in locals() else ""}
+            return {"error": f"Chyba při interpretaci požadavku: {str(e)}"}
 
     def generate_visualization_instructions(self, decision: Dict[str, Any]) -> \
     Dict[str, Any]:

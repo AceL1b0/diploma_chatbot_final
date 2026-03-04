@@ -47,8 +47,6 @@ class MCPAgent:
         advanced_keywords = [
             "interaktivní", "3d", "animace", "real-time", "streaming",
             "machine learning", "plotly", "sankey", "treemap",
-            # Klíčová slova
-            "torch", "pytorch", "cuda", "gpu", "accelerator", "nvidia", "tensor",
         ]
         low = user_request.lower()
         for keyword in advanced_keywords:

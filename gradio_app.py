@@ -4,6 +4,7 @@ Gradio rozhraní pro multiagentní chatbot pro vizualizaci dat
 import gradio as gr
 import os
 import tempfile
+import time
 from typing import List, Tuple, Dict
 import shutil
 
@@ -94,19 +95,20 @@ class DataVisualizationChatbot:
             Tuple s odpovědí, aktualizovanou historií a stavem
         """
         if not self.current_file_path:
-            return "Nejprve nahrajte dataset!", history, "Chyba: Dataset není nahraný", []
+            return "", history, "Chyba: Nejprve nahrajte dataset!", []
 
         try:
+            t_start = time.time()
             decision = self.main_agent.interpret_user_request(message)
 
             if "error" in decision:
-                return f"Chyba: {decision['error']}", history, "Chyba při interpretaci", []
+                return "", history, f"Chyba při interpretaci: {decision['error']}", []
 
             instructions = self.main_agent.generate_visualization_instructions(
                 decision)
 
             if "error" in instructions:
-                return f"Chyba: {instructions['error']}", history, "Chyba při generování instrukcí", []
+                return "", history, f"Chyba při generování instrukcí: {instructions['error']}", []
 
             # Rozhodnutí mezi MCP Agent a Visualization Agent
             if self.mcp_agent.should_activate(message, instructions[
@@ -140,7 +142,9 @@ class DataVisualizationChatbot:
                     user_message += f"\n\n**Chyba při spuštění:**\n```\n{stderr[:2000]}\n```"
                 if stdout:
                     user_message += f"\n\n**Výstup:**\n```\n{stdout[:1000]}\n```"
-                return user_message, history, "Nepodařilo se vytvořit vizualizaci", []
+                history.append({"role": "user", "content": message})
+                history.append({"role": "assistant", "content": user_message})
+                return "", history, "Nepodařilo se vytvořit vizualizaci", []
 
             # Příprava odpovědi
             generated_files = viz_result["generated_files"]
@@ -165,6 +169,7 @@ class DataVisualizationChatbot:
                     requested_graphs=instructions.get("graphs", []),
                     generated_files=generated_files,
                 )
+                elapsed = round(time.time() - t_start, 1)
 
                 if auto_explain:
                     response += "\n\n## 📘 Vysvětlení grafů\n" + auto_explain.strip()
@@ -183,12 +188,12 @@ class DataVisualizationChatbot:
                 history.append({"role": "user", "content": message})
                 history.append({"role": "assistant", "content": response})
 
-                return response, history, "Vizualizace vytvořeny úspěšně!", generated_files
+                return "", history, f"Vizualizace vytvořeny úspěšně! (⏱ {elapsed} s)", generated_files
             else:
-                return "Vizualizace byly vytvořeny, ale nebyly nalezeny žádné soubory.", history, "Upozornění: Žádné soubory", []
+                return "", history, "Upozornění: Žádné soubory", []
 
         except Exception as e:
-            return f"Chyba při zpracování požadavku: {str(e)}", history, "Chyba systému", []
+            return "", history, f"Chyba při zpracování požadavku: {str(e)}", []
 
     def rate_visualization(self, rating: int) -> Tuple[str, str]:
         """
@@ -233,12 +238,14 @@ class DataVisualizationChatbot:
         score_text += f"Celkem hodnocení: {stats['rated']} (Dobré: {stats['good']}, Špatné: {stats['bad']})"
         return score_text
 
-    def reset_conversation(self) -> Tuple[str, List[Dict[str, str]], str, List[str]]:
+    def reset_conversation(self) -> Tuple[str, List[Dict[str, str]], str, List[str], str]:
         """Resetuje konverzaci a dataset"""
         self.main_agent.reset_conversation()
         self.viz_agent.cleanup_sandbox()
         self.current_file_path = None
-        return "", [], "Konverzace resetována", []
+        self.current_evaluation_id = None
+        self.eval_agent.evaluations = []
+        return "", [], "Konverzace resetována", [], "📊 **Zatím žádná hodnocení**"
 
 
 def create_gradio_interface():
@@ -353,7 +360,7 @@ def create_gradio_interface():
 
         reset_btn.click(
             fn=chatbot.reset_conversation,
-            outputs=[dataset_info, chatbot_interface, status, gallery]
+            outputs=[dataset_info, chatbot_interface, status, gallery, score_display]
         )
 
         # Event handler pro hodnocení

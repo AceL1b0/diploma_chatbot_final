@@ -213,8 +213,10 @@ Formát:
 Pravidla:
 - Nehalucinuj konkrétní hodnoty ani vztahy, které nejsou z grafu patrné.
 - Pokud je graf nečitelný / bez popisků, řekni to a uveď, co chybí.
+- VŽDY dokonči vysvětlení všech grafů. Nepřidávej žádný text za posledním grafem.
+- Nikdy nezačínej větu nebo bod, který nedokončíš.
 """
-        return self._call_llm_with_images(prompt, generated_files, max_tokens=2000)
+        return self._call_llm_with_images(prompt, generated_files, max_tokens=3000)
 
     def latest_id(self) -> Optional[str]:
         if not self.evaluations:

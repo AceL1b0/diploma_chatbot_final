@@ -76,7 +76,7 @@ POVINNÉ:
 KRITICKÉ – ZÁVORKY (jinak skript spadne se SyntaxError):
 - Každá otevírací závorka musí mít uzavírací: každé ( musí mít ), každé [ musí mít ].
 - U volání jako .barh(...), .plot(...) pište VŠECHNY argumenty a uzavírací ) na JEDEN řádek, např. axes[1,0].barh(x, y, color='blue'). Nikdy neukončujte řádek čárkou a otevřenou závorkou – na dalším řádku musí být uzavírací ).
-- Pokud volání rozdělíte na více řádků, na konci posledního řádku s argumentem musí být uzavírací ).
+- Pokud volání rozdělíte na více řádků, na konci posledního řádu s argumentem musí být uzavírací ).
 
 Vytvořte jednoduchý, funkční skript bez Plotly.
 """
@@ -230,8 +230,7 @@ Vytvořte jednoduchý, funkční skript bez Plotly.
             self.sandbox_dir = None
 
 
-    def create_visualizations(self, instructions: Dict[str, Any],
-                              dataset_path: str) -> Dict[str, Any]:
+    def create_visualizations(self, instructions: Dict[str, Any], dataset_path: str) -> Dict[str, Any]:
         """
         Hlavní metoda pro vytvoření vizualizací
 
@@ -277,4 +276,3 @@ Vytvořte jednoduchý, funkční skript bez Plotly.
                     "traceback": traceback.format_exc()
                 }
             }
-

@@ -5,7 +5,7 @@ import gradio as gr
 import os
 import tempfile
 import time
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 import shutil
 
 from agents.main_agent import MainAgent
@@ -83,45 +83,45 @@ class DataVisualizationChatbot:
 
     def process_user_message(self, message: str,
                              history: List[Dict[str, str]]) -> Tuple[
-        str, List[Dict[str, str]], str, List[str]]:
+        str, List[Dict[str, str]], str, List[str], Optional[str]]:
         """
         Zpracuje zprávu uživatele a vrátí odpověď
-
-        Args:
-            message: Zpráva od uživatele
-            history: Historie konverzace
-
-        Vrací:
-            Tuple s odpovědí, aktualizovanou historií a stavem
         """
         if not self.current_file_path:
-            return "", history, "Chyba: Nejprve nahrajte dataset!", []
+            return "", history, "Chyba: Nejprve nahrajte dataset!", [], None
+
 
         try:
             t_start = time.time()
+
+            # Krok 1: Main Agent interpretuje požadavek
+            t1 = time.time()
+            print("🧠 [1/4] Main Agent: interpretace požadavku...")
             decision = self.main_agent.interpret_user_request(message)
+            t1_elapsed = round(time.time() - t1, 1)
+            graphs_chosen = decision.get('graph_types') or decision.get('default_graphs', [])
+            print(f"✅ [1/4] Main Agent hotov ({t1_elapsed} s) | specific={decision.get('specific_graphs')} | grafy={graphs_chosen}")
 
             if "error" in decision:
-                return "", history, f"Chyba při interpretaci: {decision['error']}", []
+                return "", history, f"Chyba při interpretaci: {decision['error']}", [], None
 
-            instructions = self.main_agent.generate_visualization_instructions(
-                decision)
+            instructions = self.main_agent.generate_visualization_instructions(decision)
 
             if "error" in instructions:
-                return "", history, f"Chyba při generování instrukcí: {instructions['error']}", []
+                return "", history, f"Chyba při generování instrukcí: {instructions['error']}", [], None
 
-            # Rozhodnutí mezi MCP Agent a Visualization Agent
-            if self.mcp_agent.should_activate(message, instructions[
-                "visualization_type"]):
-                print("🔄 Aktivace MCP Agent pro pokročilé vizualizace")
-                viz_result = self.mcp_agent.generate_advanced(message,
-                                                              instructions.get(
-                                                                  "dataset_info",
-                                                                  {}))
+            # Krok 2: MCP Agent vs Visualization Agent
+            use_mcp = self.mcp_agent.should_activate(message, instructions["visualization_type"])
+            t2 = time.time()
+            if use_mcp:
+                print("🔄 [2/4] MCP Agent: pokročilé vizualizace (vzdálený server)...")
+                viz_result = self.mcp_agent.generate_advanced(message, instructions.get("dataset_info", {}))
             else:
-                print("📊 Použití standardního Visualization Agent")
-                viz_result = self.viz_agent.create_visualizations(instructions,
-                                                                  self.current_file_path)
+                print("📊 [2/4] Visualization Agent: generování skriptu + sandbox...")
+                viz_result = self.viz_agent.create_visualizations(instructions, self.current_file_path)
+            t2_elapsed = round(time.time() - t2, 1)
+            agent_name = "MCP Agent" if use_mcp else "Visualization Agent"
+            print(f"✅ [2/4] {agent_name} hotov ({t2_elapsed} s) | úspěch={viz_result.get('success')} | souborů={len(viz_result.get('generated_files', []))}")
 
             if not viz_result["success"]:
                 error_msg = viz_result.get("error", "Neznámá chyba")
@@ -144,38 +144,29 @@ class DataVisualizationChatbot:
                     user_message += f"\n\n**Výstup:**\n```\n{stdout[:1000]}\n```"
                 history.append({"role": "user", "content": message})
                 history.append({"role": "assistant", "content": user_message})
-                return "", history, "Nepodařilo se vytvořit vizualizaci", []
+                return "", history, "Nepodařilo se vytvořit vizualizaci", [], None
 
             # Příprava odpovědi
             generated_files = viz_result["generated_files"]
 
             if generated_files:
-                response = f"✅ **Vizualizace úspěšně vytvořeny!**\n\n"
-                response += f"📊 **Vytvořené grafy:**\n"
-                for i, file_path in enumerate(generated_files, 1):
-                    filename = os.path.basename(file_path)
-                    response += f"{i}. {filename}\n"
-
-                response += f"\n🎯 **Typ vizualizace:** {'Specifické grafy' if instructions['visualization_type'] == 'specific' else 'Doporučené grafy'}\n"
-                response += f"📝 **Počet grafů:** {len(generated_files)}\n"
-
-                # Vysvětlení grafů (LLM) místo původního "reasoning"
+                # Krok 3: Evaluation Agent – vysvětlení grafů
+                t3 = time.time()
+                print(f"🔍 [3/4] Evaluation Agent: LLM hodnocení {len(generated_files)} grafů...")
                 script = viz_result.get("script", "")
                 auto_explain = self.eval_agent.explain(
                     user_request=message,
                     dataset_info=instructions.get("dataset_info", {}),
-                    visualization_type=instructions.get("visualization_type",
-                                                        ""),
+                    visualization_type=instructions.get("visualization_type", ""),
                     requested_graphs=instructions.get("graphs", []),
                     generated_files=generated_files,
                 )
-                elapsed = round(time.time() - t_start, 1)
+                t3_elapsed = round(time.time() - t3, 1)
+                print(f"✅ [3/4] Evaluation Agent hotov ({t3_elapsed} s) | délka vysvětlení={len(auto_explain)} znaků")
 
-                if auto_explain:
-                    response += "\n\n## 📘 Vysvětlení grafů\n" + auto_explain.strip()
-
-                # Uložení do Evaluation Agent
+                # Krok 4: Evaluation Agent – uložení skriptu
                 if script:
+                    print("💾 [4/4] Evaluation Agent: ukládání skriptu...")
                     self.current_evaluation_id = self.eval_agent.save_script(
                         script=script,
                         user_request=message,
@@ -183,17 +174,62 @@ class DataVisualizationChatbot:
                         graphs=instructions.get("graphs", []),
                         auto_explanations=auto_explain,
                     )
+                    print(f"✅ [4/4] Skript uložen, ID={self.current_evaluation_id}")
+
+                elapsed = round(time.time() - t_start, 1)
+                print(f"⏱ Celkem: {elapsed} s | Main Agent: {t1_elapsed} s | {agent_name}: {t2_elapsed} s | Explain: {t3_elapsed} s")
+
+                # Sestavení odpovědi s tokem agentů
+                response = "✅ **Vizualizace úspěšně vytvořeny!**\n\n"
+
+                # Tok agentů
+                response += "---\n"
+                response += "**🔁 Tok agentů:**\n"
+                response += f"1. 🧠 **Main Agent** ({t1_elapsed} s) → vybrané grafy: {', '.join(graphs_chosen) if graphs_chosen else '—'}\n"
+                response += f"2. {'🔄 **MCP Agent**' if use_mcp else '📊 **Visualization Agent**'} ({t2_elapsed} s) → {len(generated_files)} grafů vygenerováno\n"
+                response += f"3. 🔍 **Evaluation Agent** ({t3_elapsed} s) → vysvětlení připraveno\n"
+                response += f"\n⏱ **Celková doba:** {elapsed} s\n"
+                response += "---\n\n"
+
+                response += f"📊 **Vytvořené grafy ({len(generated_files)}):** "
+                response += ", ".join(os.path.basename(f) for f in generated_files) + "\n"
+                response += f"🎯 **Typ vizualizace:** {'Specifické grafy' if instructions['visualization_type'] == 'specific' else 'Doporučené grafy'}\n"
+
+                if auto_explain:
+                    response += "\n\n## 📘 Vysvětlení grafů\n" + auto_explain.strip()
+
+                # Uložení skriptu jako soubor ke stažení
+                script_file_path = None
+                if script:
+                    script_file_path = os.path.join(
+                        os.path.dirname(self.current_file_path), "verify.py"
+                    )
+                    # Nahradit 'data.csv' v skriptu absolutní cestou k datasetu
+                    abs_dataset_path = self.current_file_path.replace("\\", "/")
+                    script_with_path = script.replace(
+                        "pd.read_csv('data.csv')",
+                        f"pd.read_csv(r'{abs_dataset_path}')"
+                    ).replace(
+                        'pd.read_csv("data.csv")',
+                        f'pd.read_csv(r"{abs_dataset_path}")'
+                    )
+                    with open(script_file_path, "w", encoding="utf-8") as f:
+                        f.write("# Spusťte v terminálu (ve virtuálním prostředí projektu):\n")
+                        f.write(f"# python '{script_file_path}'\n")
+                        f.write("# Dataset je načítán přímo z původní cesty – není třeba nic kopírovat.\n\n")
+                        f.write(script_with_path)
+                    response += "\n\n💾 **Skript ke stažení:** Stáhněte `verify.py` a spusťte lokálně pro manuální ověření grafů."
 
                 # Aktualizace historie
                 history.append({"role": "user", "content": message})
                 history.append({"role": "assistant", "content": response})
 
-                return "", history, f"Vizualizace vytvořeny úspěšně! (⏱ {elapsed} s)", generated_files
+                return "", history, f"Vizualizace vytvořeny úspěšně! (⏱ {elapsed} s)", generated_files, script_file_path
             else:
-                return "", history, "Upozornění: Žádné soubory", []
+                return "", history, "Upozornění: Žádné soubory", [], None
 
         except Exception as e:
-            return "", history, f"Chyba při zpracování požadavku: {str(e)}", []
+            return "", history, f"Chyba při zpracování požadavku: {str(e)}", [], None
 
     def rate_visualization(self, rating: int) -> Tuple[str, str]:
         """
@@ -339,6 +375,13 @@ def create_gradio_interface():
             height="auto"
         )
 
+        # Stažení skriptu pro manuální evaluaci
+        script_download = gr.File(
+            label="🔬 Stáhnout verify.py",
+            visible=True,
+            interactive=False,
+        )
+
         # Event handlers
         file_upload.change(
             fn=chatbot.process_file_upload,
@@ -349,13 +392,13 @@ def create_gradio_interface():
         send_btn.click(
             fn=chatbot.process_user_message,
             inputs=[msg_input, chatbot_interface],
-            outputs=[msg_input, chatbot_interface, status, gallery]
+            outputs=[msg_input, chatbot_interface, status, gallery, script_download]
         )
 
         msg_input.submit(
             fn=chatbot.process_user_message,
             inputs=[msg_input, chatbot_interface],
-            outputs=[msg_input, chatbot_interface, status, gallery]
+            outputs=[msg_input, chatbot_interface, status, gallery, script_download]
         )
 
         reset_btn.click(

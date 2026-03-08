@@ -216,10 +216,9 @@ Pravidla:
 - VŽDY dokonči vysvětlení všech grafů. Nepřidávej žádný text za posledním grafem.
 - Nikdy nezačínej větu nebo bod, který nedokončíš.
 """
-        return self._call_llm_with_images(prompt, generated_files, max_tokens=3000)
+        return self._call_llm_with_images(prompt, generated_files, max_tokens=2500)
 
     def latest_id(self) -> Optional[str]:
         if not self.evaluations:
             return None
         return max(self.evaluations, key=lambda r: r.get("timestamp", ""))
-

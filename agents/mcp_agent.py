@@ -112,7 +112,6 @@ class MCPAgent:
 
             saved_files = []
             try:
-                # Server vrací 'visualizations' jako dict {tool_name: base64}
                 visualizations = data.get("visualizations", {})
                 if visualizations:
                     for key, b64img in visualizations.items():
@@ -120,7 +119,6 @@ class MCPAgent:
                             f.write(base64.b64decode(b64img))
                             saved_files.append(f.name)
                 else:
-                    # Fallback na single visualization
                     img_b64 = data.get("visualization", "")
                     if not img_b64:
                         print("Nepodařilo se vytvořit vizualizaci")

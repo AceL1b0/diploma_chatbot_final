@@ -138,8 +138,7 @@ Rozhodněte o grafech pro požadavek uživatele pomocí nástroje interpret_requ
         except Exception as e:
             return {"error": f"Chyba při interpretaci požadavku: {str(e)}"}
 
-    def generate_visualization_instructions(self, decision: Dict[str, Any]) -> \
-    Dict[str, Any]:
+    def generate_visualization_instructions(self, decision: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generuje instrukce pro Visualization Agent
 

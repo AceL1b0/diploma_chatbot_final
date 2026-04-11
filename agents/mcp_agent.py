@@ -39,24 +39,64 @@ class MCPAgent:
             return False
 
     def should_activate(self, user_request: str, visualization_type: str) -> bool:
-        print(f"🔍 MCP should_activate: user_request='{user_request}', type='{visualization_type}'")
-        # Aktivace MCP při nízkém skóre
+        """
+        Rozhoduje, zda se má použít MCP Agent.
+        
+        MCP Server je ideální pro:
+        - Insights, trendy, anomálie v datech
+        - Komplexní analýzy (korelace, agregace, statistika)
+        - Porovnání, top N, time series analýzy
+        - Distribuce s violin plotem
+        """
+        print(f"🔍 MCP should_activate: user_request='{user_request}'")
+        
+        # 1. Pokud je skóre < 50%, aktivuj MCP (viz agent selhal)
         if self.eval.should_use_mcp():
             print("✅ MCP aktivován kvůli nízkému skóre")
             return True
+        
+        # 2. Pokročilá klíčová slova pro insights & komplexní analýzy
         advanced_keywords = [
-            "interaktivní", "3d", "animace", "real-time", "streaming",
-            "machine learning", "plotly", "sankey", "treemap",
+            # Insights & datová analýza
+            "insight", "trendy", "trend", "anomálie", "anomaly", "outlier",
+            "korelace", "correlation", "vztah", "souvislost",
+            
+            # Komplexní vizualizace
+            "časová řada", "time series", "srovnění", "porovnání",
+            "top", "nejlepší", "nejhorší", "rankingy", "ranking",
+            "agregace", "aggregation", "distribuce", "distribution",
+            
+            # Data transformace
+            "medián", "median", "průměr", "average", "mean",
+            "percentil", "percentile", "quartile", "kvartil",
+            "statistika", "statistics",
+            
+            # Pokročilé grafy (MCP podporuje)
+            "scatter", "regresní", "regression",
+            "dual", "dual-axis", "dual axes", "violin", "violinplot",
+            
+            # User intent
+            "pokročilý", "advanced", "hluboká analýza", "deep dive",
+            "detailní", "detailed", "komplexní", "complex",
         ]
+        
         low = user_request.lower()
         for keyword in advanced_keywords:
             if keyword in low:
                 print(f"✅ MCP aktivován kvůli klíčovému slovu: '{keyword}'")
                 return True
-        simple_keywords = ["histogram", "pie", "koláč", "box", "boxplot", "heatmap"]
+        
+        # 3. Jednoduchá klíčová slova (ZABRAŇUJÍ MCP aktivaci)
+        simple_keywords = [
+            "histogram", "pie", "koláč", "box", "boxplot", "heatmap",
+            "graf", "chart", "obrázek", "picture",
+            "jednoduchý", "simple", "basic",
+        ]
         if any(k in low for k in simple_keywords):
             print("❌ MCP neaktivován - jednoduchá vizualizace")
             return False
+        
+        # 4. Pokud žádné klíčové slovo → NEAKTIVUJ MCP
         print("❌ MCP neaktivován - žádné pokročilé klíčové slovo")
         return False
 
@@ -108,7 +148,7 @@ class MCPAgent:
                     "execution_log": {"stderr": stderr, "stdout": stdout},
                 }
 
-            print(f"📊 Grafy od MCP serveru: {list(data.get('visualizations', {}).keys())}")
+            print(f"📊 Grafy z MCP serveru: {list(data.get('visualizations', {}).keys())}")
 
             saved_files = []
             try:

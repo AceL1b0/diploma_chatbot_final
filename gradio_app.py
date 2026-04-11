@@ -52,7 +52,7 @@ class DataVisualizationChatbot:
                 return f"Chyba: {dataset_info['error']}", ""
 
             info_text = f"""
-**Dataset úspěšně nahran!**
+**Dataset úspěšně nahrán!**
 
 📊 **Základní informace:**
 - Řádky: {dataset_info['shape'][0]}
@@ -114,7 +114,7 @@ class DataVisualizationChatbot:
             use_mcp = self.mcp_agent.should_activate(message, instructions["visualization_type"])
             t2 = time.time()
             if use_mcp:
-                print("🔄 [2/4] MCP Agent: pokročilé vizualizace (vzdálený server)...")
+                print("🔄 [2/4] MCP Agent: vizualizace z MCP serveru...")
                 viz_result = self.mcp_agent.generate_advanced(message, instructions.get("dataset_info", {}))
             else:
                 print("📊 [2/4] Visualization Agent: generování skriptu + sandbox...")

@@ -58,9 +58,22 @@ def get_model() -> str:
 
 
 def load_df(dataset_info: Dict[str, Any]) -> pd.DataFrame:
+    # Preferuj plný dataset pokud je dostupný (z mcp_agent.py)
+    if "full_data" in dataset_info:
+        try:
+            df = pd.DataFrame(dataset_info["full_data"])
+            print(f"✅ Načten plný dataset: {df.shape[0]} řádků, {df.shape[1]} sloupců")
+            if df.empty:
+                raise HTTPException(400, "Dataset is empty")
+            return df
+        except Exception as e:
+            print(f"⚠️ Chyba při načítání plného datasetu: {e}, používám sample_data")
+    
+    # Zpět-kompatibilita: použij sample_data
     if "sample_data" not in dataset_info:
         raise HTTPException(400, "dataset_info.sample_data missing")
     df = pd.DataFrame(dataset_info["sample_data"])
+    print(f"⚠️ Používám pouze sample data: {df.shape[0]} řádků, {df.shape[1]} sloupců")
     if df.empty:
         raise HTTPException(400, "Dataset is empty")
     return df

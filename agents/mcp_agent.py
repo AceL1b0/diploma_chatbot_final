@@ -4,8 +4,9 @@ MCP Agent (HTTP) – volá FastAPI MCP server (např. HF Spaces) pro pokročilé
 import base64
 import os
 import tempfile
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
+import pandas as pd
 import requests
 from dotenv import load_dotenv
 from agents.evaluation_agent import EvaluationAgent
@@ -100,7 +101,7 @@ class MCPAgent:
         print("❌ MCP neaktivován - žádné pokročilé klíčové slovo")
         return False
 
-    def generate_advanced(self, user_request: str, dataset_info: Dict[str, Any]) -> Dict[str, Any]:
+    def generate_advanced(self, user_request: str, dataset_info: Dict[str, Any], dataset_path: Optional[str] = None) -> Dict[str, Any]:
         if not self.is_available():
             print("Nepodařilo se vytvořit vizualizaci")
             return {
@@ -111,6 +112,27 @@ class MCPAgent:
             }
 
         try:
+            # Pokud je dataset_path dostupný, načti plný dataset a přidej jeho data
+            if dataset_path and os.path.exists(dataset_path):
+                try:
+                    if dataset_path.endswith('.csv'):
+                        df = pd.read_csv(dataset_path)
+                    elif dataset_path.endswith(('.xlsx', '.xls')):
+                        df = pd.read_excel(dataset_path)
+                    else:
+                        df = None
+                    
+                    if df is not None:
+                        # Přidej plný dataset do dataset_info (ne jen sample)
+                        full_data = {
+                            str(k): v.tolist() if hasattr(v, 'tolist') else v 
+                            for k, v in df.to_dict().items()
+                        }
+                        dataset_info['full_data'] = full_data
+                        print(f"✅ Plný dataset nahrán: {df.shape[0]} řádků")
+                except Exception as e:
+                    print(f"⚠️ Upozornění: Nelze načíst plný dataset ({e}), používám sample data")
+            
             payload = {
                 "prompt": user_request,
                 "dataset_info": dataset_info,

@@ -115,7 +115,7 @@ class DataVisualizationChatbot:
             t2 = time.time()
             if use_mcp:
                 print("🔄 [2/4] MCP Agent: vizualizace z MCP serveru...")
-                viz_result = self.mcp_agent.generate_advanced(message, instructions.get("dataset_info", {}))
+                viz_result = self.mcp_agent.generate_advanced(message, instructions.get("dataset_info", {}), self.current_file_path)
             else:
                 print("📊 [2/4] Visualization Agent: generování skriptu + sandbox...")
                 viz_result = self.viz_agent.create_visualizations(instructions, self.current_file_path)
